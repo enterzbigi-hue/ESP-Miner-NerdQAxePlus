@@ -8,7 +8,8 @@
 #include "nvs_config.h"
 #include "system.h"
 #include "boards/board.h"
-
+#include "auto_tuner.h"
+#include "hash_capture.h"
 #include "simple_ring64.hpp"
 #include "utils.h"
 
@@ -116,6 +117,11 @@ void ASIC_result_task(void *pvParameters)
         if (duplicate) {
             ESP_LOGW(TAG, "(%s) duplicate share detected!", pool_str);
             countDuplicateHWNonces();
+        }
+
+        if (!duplicate && nonce_diff >= job->asic_diff) {
+            HashCapture::record(job, asic_job_id, true, asic_result.nonce, asic_result.rolled_version, nonce_diff);
+            AutoTuner::reportShareDiff(job->tuner_run, job->tuner_step, job->extranonce2, nonce_diff);
         }
 
         if (!duplicate && nonce_diff >= board->getAsicMaxDifficulty()) {

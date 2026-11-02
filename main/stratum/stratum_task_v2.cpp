@@ -114,13 +114,9 @@ bool StratumTaskV2::loadAuthorityPubkey(uint8_t out[32])
 
 void StratumTaskV2::protocolLoop()
 {
-    // Extended Channel only for now - Standard Channel support disabled
-    // To re-enable, uncomment the config read below:
-    // uint16_t chan_cfg = m_config->isPrimary()
-    //     ? Config::getSV2ChannelType()
-    //     : Config::getFallbackSV2ChannelType();
-    // m_channelType = (chan_cfg == 1) ? SV2_CHANNEL_STANDARD : SV2_CHANNEL_EXTENDED;
-    m_channelType = SV2_CHANNEL_EXTENDED;
+    const uint16_t channel = m_config->isPrimary()
+        ? Config::getSV2ChannelType() : Config::getFallbackSV2ChannelType();
+    m_channelType = channel == 1 ? SV2_CHANNEL_STANDARD : SV2_CHANNEL_EXTENDED;
 
     // Reset connection state
     memset(&m_sv2_conn, 0, sizeof(m_sv2_conn));
@@ -378,6 +374,10 @@ bool StratumTaskV2::receiveOpenChannelSuccess()
             return false;
         }
 
+        if (extranonce_size < 1 || extranonce_size > 32) {
+            ESP_LOGE(m_tag, "Unsupported SV2 extranonce size: %u bytes", (unsigned)extranonce_size);
+            return false;
+        }
         m_sv2_conn.extranonce_size = (uint8_t)extranonce_size;
         m_sv2_conn.extranonce_prefix_len = extranonce_prefix_len;
         memcpy(m_sv2_conn.extranonce_prefix, extranonce_prefix, extranonce_prefix_len);

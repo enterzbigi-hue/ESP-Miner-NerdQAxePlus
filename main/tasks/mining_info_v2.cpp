@@ -5,7 +5,10 @@
 #include <cstdlib>
 
 #include "esp_log.h"
+#include "esp_random.h"
+#include "extranonce_range.h"
 #include "mining.h"
+#include "hash_capture.h"
 
 extern "C" {
 #include "mining_utils.h"
@@ -44,7 +47,7 @@ void MiningInfoV2Standard::updateJob(uint32_t job_id, uint32_t version,
     snprintf(m_jobid_str, sizeof(m_jobid_str), "%lu", (unsigned long)job_id);
 }
 
-bm_job *MiningInfoV2Standard::buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff)
+bm_job *MiningInfoV2Standard::buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff, const char * /*extranonce_hex*/)
 {
     bm_job *job = (bm_job *)malloc(sizeof(bm_job));
     if (!job) return nullptr;
@@ -53,10 +56,16 @@ bm_job *MiningInfoV2Standard::buildBmJob(uint32_t extranonce_2, int pool_id, uin
     job->version_mask = m_version_mask;
     job->target = m_nbits;
     job->ntime = m_ntime;
-    job->starting_nonce = 0;
+    //job->starting_nonce = 0;
+    // Generujemy losową liczbę 32-bitową i wymuszamy, aby należała do drugiej połowy (ustawiając najwyższy bit na 1)
+uint32_t random_second_half = esp_random() | 0x80000000;
+job->starting_nonce = random_second_half;
     job->pool_diff = m_difficulty;
     job->asic_diff = asic_diff;
     job->pool_id = pool_id;
+    job->capture_inputs_id = 0;
+    job->tuner_run = 0;
+    job->tuner_step = -1;
 
     // SV2 provides merkle_root and prev_hash in internal byte order.
     // NerdQAxePlus test_nonce_value() uses bm_job fields directly (no transform).
@@ -168,6 +177,11 @@ void MiningInfoV2Extended::updateJob(const sv2_ext_job_t *ext_job,
                                       uint8_t extranonce_size,
                                       uint32_t version_mask, uint32_t difficulty)
 {
+    if (!ext_job || extranonce_prefix_len > 32 || extranonce_size < 1 || extranonce_size > 32 ||
+        (extranonce_prefix_len && !extranonce_prefix)) {
+        invalidate();
+        return;
+    }
     m_job_id = ext_job->job_id;
     m_version = ext_job->version;
     memcpy(m_prev_hash, ext_job->prev_hash, 32);
@@ -212,8 +226,10 @@ void MiningInfoV2Extended::updateJob(const sv2_ext_job_t *ext_job,
     }
 }
 
-bm_job *MiningInfoV2Extended::buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff)
+bm_job *MiningInfoV2Extended::buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff, const char *extranonce_hex)
 {
+    if (!isValid() || m_extranonce_size < 1 || m_extranonce_size > 32 ||
+        (extranonce_hex && !ExtranonceRange::validHex(extranonce_hex, m_extranonce_size))) return nullptr;
     bm_job *job = (bm_job *)malloc(sizeof(bm_job));
     if (!job) return nullptr;
 
@@ -225,6 +241,8 @@ bm_job *MiningInfoV2Extended::buildBmJob(uint32_t extranonce_2, int pool_id, uin
         en2_bin[i] = (uint8_t)(counter & 0xFF);
         counter >>= 8;
     }
+
+    if (extranonce_hex) ExtranonceRange::decode(extranonce_hex, m_extranonce_size, en2_bin);
 
     // Compute coinbase tx hash: double_sha256(prefix + extranonce_prefix + extranonce_2 + suffix)
     size_t coinbase_len = m_coinbase_prefix_len + m_extranonce_prefix_len + m_extranonce_size + m_coinbase_suffix_len;
@@ -242,6 +260,8 @@ bm_job *MiningInfoV2Extended::buildBmJob(uint32_t extranonce_2, int pool_id, uin
 
     uint8_t coinbase_hash[32];
     double_sha256_bin(coinbase, coinbase_len, coinbase_hash);
+    const uint32_t captureId = HashCapture::inputs(coinbase, coinbase_len, m_merkle_path,
+        m_merkle_path_count, m_coinbase_prefix_len + m_extranonce_prefix_len, m_extranonce_size);
     free(coinbase);
 
     // Compute merkle root from coinbase hash + merkle path
@@ -259,10 +279,16 @@ bm_job *MiningInfoV2Extended::buildBmJob(uint32_t extranonce_2, int pool_id, uin
     job->version_mask = m_version_mask;
     job->target = m_nbits;
     job->ntime = m_ntime;
-    job->starting_nonce = 0;
+    //job->starting_nonce = 0;
+    // Generujemy losową liczbę 32-bitową i wymuszamy, aby należała do drugiej połowy (ustawiając najwyższy bit na 1)
+uint32_t random_second_half = esp_random() | 0x80000000;
+job->starting_nonce = random_second_half;
     job->pool_diff = m_difficulty;
     job->asic_diff = asic_diff;
     job->pool_id = pool_id;
+    job->capture_inputs_id = 0;
+    job->tuner_run = 0;
+    job->tuner_step = -1;
 
     // Same byte order handling as Standard channel (see comments above).
     memcpy(job->merkle_root, merkle_root, 32);
@@ -279,6 +305,7 @@ bm_job *MiningInfoV2Extended::buildBmJob(uint32_t extranonce_2, int pool_id, uin
     char en2_hex[65];
     bin2hex(en2_bin, m_extranonce_size, en2_hex, sizeof(en2_hex));
     job->extranonce2 = strdup(en2_hex);
+    job->capture_inputs_id = captureId;
 
     return job;
 }

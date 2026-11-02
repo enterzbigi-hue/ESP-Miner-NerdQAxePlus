@@ -1,0 +1,110 @@
+<nb-card>
+  <nb-card-header>Auto tuner · extranonce2</nb-card-header>
+  <nb-card-body>
+    <p class="intro">Porównuj zakresy extranonce2 na podstawie trafień lokalnych układów ASIC.
+      Każdy zakres trwa 10 zaobserwowanych zmian wysokości bloku sieci Bitcoin.</p>
+    <p class="error" role="alert" *ngIf="error">{{ error }}</p>
+    <ng-container *ngIf="state as s; else loading">
+      <div class="status-grid">
+        <div><small>Tryb pracy</small><strong>{{ !s.enabled ? 'Wyłączony · start ' + s.manual_pct + '%' : !s.compatible ? 'Pomiar oczekuje na zgodną sesję' : s.finished ? 'Praca w najlepszym zakresie' : 'Skanowanie w dół' }}</strong></div>
+        <div><small>Zakres skanu</small><strong>{{ current?.upper_pct | number:'1.0-2' }}% → {{ current?.lower_pct | number:'1.0-2' }}%</strong></div>
+        <div><small>Bloki w zakresie</small><strong>{{ current?.blocks || 0 }} / {{ s.blocks_target }}</strong></div>
+        <div><small>Najlepszy diff w skanie</small><strong>{{ best ? (best.max_diff | number:'1.0-2') : 'Brak trafień' }}</strong></div>
+      </div>
+      <p><strong>{{ protocolName(s.session_protocol) }}</strong>
+        Ostatni przydział puli: {{ s.extranonce_bytes }} B = {{ s.extranonce_bytes * 8 }} bit = {{ s.extranonce_bytes * 2 }} znaków HEX.
+        Licznik skanu: {{ s.effective_bits ? s.effective_bits + ' bit' : 'niedostępny' }}.</p>
+      <label class="progress-label" for="scan-progress">Postęp skanu: {{ progress | number:'1.0-1' }}%</label>
+      <progress id="scan-progress" max="100" [value]="progress"></progress>
+      <p class="nonce">Aktualnie wysłane extranonce2: <code>{{ s.current_hex || 'Oczekiwanie na zadanie' }}</code>
+        <span> · {{ s.extranonce_bytes }} bajtów · wysokość zadania: {{ s.candidate_height || 'oczekiwanie' }}</span></p>
+      <p class="notice" *ngIf="s.session_protocol === 3">V2 Standard: kopanie działa, ale ten kanał nie udostępnia extranonce2 do regulacji. Auto tuner extranonce2 oczekuje na V1 lub V2 Extended. Zwykły nonce 32-bitowy jest osobnym polem.</p>
+      <p class="notice" *ngIf="!s.extranonce_bytes && s.session_protocol !== 3">Oczekiwanie na zadanie z regulowanym extranonce2.</p>
+      <p class="notice" *ngIf="s.enabled && s.extranonce_bytes && !s.compatible">Pomiar wstrzymany: wybrano {{ s.search_bits || 'Auto' }} bitów i {{ s.required_protocol ? protocolName(s.required_protocol) : 'dowolny protokół' }},
+        a bieżąca sesja udostępnia {{ s.extranonce_bytes * 8 }} bitów w {{ protocolName(s.session_protocol) }}.
+        Zwykłe kopanie trwa. Program nie wysyła extranonce2 o niezgodnej długości.</p>
+      <p class="notice" *ngIf="s.enabled && current?.exhausted">Zakres został wyczerpany. Program nie zawija licznika w górę; czeka na zmianę zakresu.</p>
+      <p class="notice" *ngIf="!s.persistence_ok">Nie udało się zapisać pomiaru w pamięci urządzenia. Po restarcie ostatnie wyniki mogą być utracone.</p>
+      <p *ngIf="s.finished && s.best_step < 0">Skan zakończony bez trafień. Tuner wyłączony; punkt startowy wynosi 73,24%.</p>
+      <div class="controls">
+        <button nbButton status="primary" [disabled]="busy || s.enabled || (s.finished && s.best_step < 0)" (click)="command('start')">{{ s.finished ? 'Włącz wybrany zakres' : 'Wznów skan' }}</button>
+        <label for="manual-pct">Start po wyłączeniu (%)</label>
+        <input nbInput id="manual-pct" type="text" inputmode="decimal" [(ngModel)]="manualPct" style="max-width: 8rem" aria-label="Start po wyłączeniu (%)">
+        <button nbButton status="basic" [disabled]="busy || !validManual" (click)="command('pause')">{{ s.enabled ? 'Wyłącz i zastosuj start' : 'Zastosuj start' }}</button>
+        <button nbButton status="basic" (click)="exportCsv()">Eksport CSV</button>
+      </div>
+      <div class="new-scan">
+        <label for="search-bits">Przestrzeń licznika extranonce2</label>
+        <select id="search-bits" [(ngModel)]="searchBits">
+          <option *ngFor="let option of widthOptions" [ngValue]="option.value">{{ option.label }}</option>
+        </select>
+        <label for="required-protocol">Sesje uwzględniane w pomiarze</label>
+        <select id="required-protocol" [(ngModel)]="requiredProtocol">
+          <option [ngValue]="0">Auto · V1 lub V2 Extended</option>
+          <option [ngValue]="1">Tylko Stratum V1</option>
+          <option [ngValue]="2">Tylko Stratum V2 Extended</option>
+          <option [ngValue]="3">Stratum V2 Standard · bez regulacji extranonce2</option>
+        </select>
+        <small>Te ustawienia dotyczą nowego pomiaru. Długość danych wysyłanych do puli zawsze odpowiada sesji.
+          Mniejszy licznik jest uzupełniany zerami, np. 8-bitowe FF → 000000FF w sesji 4-bajtowej.
+          Większy licznik wymaga odpowiednio większego przydziału od puli — również w V1.</small>
+        <label for="start-pct">Początek nowego skanu (%)</label>
+        <input nbInput id="start-pct" type="text" inputmode="decimal" [(ngModel)]="startPct" aria-describedby="start-help">
+        <button nbButton status="warning" [disabled]="busy || !validStart" (click)="command('reset')">Rozpocznij nowy pomiar</button>
+        <small id="start-help">0,01–100%, maks. 2 miejsca po przecinku. Nowy pomiar usuwa poprzednie wyniki. Eksportuj je przed rozpoczęciem.
+          Skan schodzi co 5 punktów procentowych do 0%. Po jego zakończeniu program wybiera zakres z najwyższym diffem.</small>
+      </div>
+      <details class="connection-editor">
+        <summary>Połączenie puli · wybierz V1, V2 Standard lub V2 Extended</summary>
+        <div class="connection-fields">
+          <label for="pool-index">Pula</label>
+          <select id="pool-index" [ngModel]="poolIndex" (ngModelChange)="selectPool($event)">
+            <option [ngValue]="0">Główna</option><option [ngValue]="1">Druga / zapasowa</option>
+          </select>
+          <label for="connection-mode">Protokół połączenia</label>
+          <select id="connection-mode" [(ngModel)]="connectionMode">
+            <option [ngValue]="1">Stratum V1</option>
+            <option [ngValue]="3">Stratum V2 Standard</option>
+            <option [ngValue]="2">Stratum V2 Extended</option>
+          </select>
+          <label for="pool-host">Adres serwera puli</label>
+          <input nbInput id="pool-host" [(ngModel)]="connectionHost">
+          <label for="pool-port">Port puli</label>
+          <input nbInput id="pool-port" type="number" min="1" max="65535" [(ngModel)]="connectionPort">
+          <ng-container *ngIf="connectionMode !== 1">
+            <label for="pool-key">Authority Public Key puli (V2)</label>
+            <input nbInput id="pool-key" [(ngModel)]="connectionKey">
+          </ng-container>
+          <button nbButton status="primary" [disabled]="busy || !validConnection" (click)="saveConnection()">Zapisz połączenie puli</button>
+        </div>
+        <p>Zmiana tego protokołu ponownie łączy z pulą. Wpisz adres, port i klucz właściwe dla wybranego protokołu, podane przez pulę.
+          Dane workera i ustawienia uwierzytelniania pozostają zgodne z konfiguracją puli.</p>
+        <p role="status" *ngIf="connectionInfo">{{ connectionInfo }}</p>
+      </details>
+      <p class="footnote">Po wyłączeniu tunera, w sesjach udostępniających extranonce2, licznik zaczyna od zapisanego {{ s.manual_pct }}% wybranej przestrzeni licznika (Auto: cały przydział puli) i schodzi w dół.
+        Postęp i wyniki zapisują się co 60 sekund oraz przy zmianie zakresu i trybu. Zanik zasilania może utracić ostatnią minutę pomiaru.
+        Urządzenia podrzędne CAN nie biorą udziału w tym eksperymencie.</p>
+    </ng-container>
+    <ng-template #loading><p *ngIf="!error">Ładowanie stanu tunera…</p></ng-template>
+  </nb-card-body>
+</nb-card>
+<nb-card *ngIf="state as s">
+  <nb-card-header>Wyniki zakresów · 5 najwyższych diffów w każdym zakresie</nb-card-header>
+  <nb-card-body>
+    <p>Najwyższy dotychczasowy diff jest wynikiem historycznym. Nie przewiduje kolejnych trafień ani nie zwiększa prawdopodobieństwa znalezienia bloku.
+      Liczba próbek, czas i liczba zadań pomagają ocenić porównywalność pomiarów.</p>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Zakres</th><th>Stan</th><th>Bloki</th><th>Zadania / próbki</th><th title="Łączny czas pracy w danym zakresie; nie jest prognozą znalezienia bloku">Czas w zakresie</th><th>Najlepszy diff / trafienia</th></tr></thead>
+      <tbody><tr *ngFor="let row of s.steps" [class.current]="s.enabled && s.compatible && row.index === s.current_step" [class.best]="row.is_best">
+        <td><strong>{{ row.upper_pct | number:'1.0-2' }}% → {{ row.lower_pct | number:'1.0-2' }}%</strong>
+          <small *ngIf="!row.empty" class="hex">{{ row.high_hex || '—' }}<br>↓ {{ row.low_hex || '—' }}</small><small *ngIf="row.empty">Brak wartości w tym przedziale.</small></td>
+        <td><span *ngIf="row.is_best">★ Najlepszy<br></span>{{ row.completed ? 'Zakończony' : row.index === s.current_step ? (!s.enabled ? 'Wstrzymany' : s.compatible ? 'Aktywny' : 'Oczekuje na zgodną sesję') : 'Oczekuje' }}</td>
+        <td>{{ row.blocks }} / 10</td><td>{{ row.jobs | number }} / {{ row.samples | number }}</td><td>{{ formatDuration(row.seconds) }}</td>
+        <td><strong>{{ row.max_diff | number:'1.0-2' }}</strong>
+          <details *ngIf="row.top.length"><summary>Pokaż najlepsze {{ row.top.length }}</summary>
+            <ol><li *ngFor="let hit of row.top">{{ hit.diff | number:'1.0-2' }} <code>{{ hit.hex }}</code></li></ol>
+          </details></td>
+      </tr></tbody>
+    </table></div>
+  </nb-card-body>
+</nb-card>

@@ -24,6 +24,7 @@
 
 #include "stratum_config.h"
 #include "stratum_manager.h"
+#include "auto_tuner.h"
 #include "stratum_task_v2.h"
 #include "utils.h"
 #include "discord.h"
@@ -481,6 +482,7 @@ void StratumManager::processCoinbase(int pool, const mining_notify *notify)
                  (unsigned long long)result.user_value_satoshis,
                  user_address);
 */
+        AutoTuner::observeHeight(result.block_height);
         m_coinbaseResult[pool & 1] = result;
         runVerification(pool & 1);
     } else {
@@ -519,6 +521,7 @@ void StratumManager::processCoinbase(int pool, const char *coinbase_1_hex, const
                  (unsigned long long)result.user_value_satoshis,
                  user_address);
 */
+        AutoTuner::observeHeight(result.block_height);
         m_coinbaseResult[pool & 1] = result;
         runVerification(pool & 1);
     } else {

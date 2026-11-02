@@ -10,6 +10,7 @@ import { SystemComponent } from './system/system.component';
 import { SwarmComponent } from './swarm/swarm.component';
 import { AlertComponent } from './alert/alert.component';
 import { SecurityComponent } from './security/security.component';
+import { TunerComponent } from './tuner/tuner.component';
 import { CanSwarmComponent } from './can-swarm/can-swarm.component';
 
 const routes: Routes = [{
@@ -24,6 +25,10 @@ const routes: Routes = [{
     {
       path: 'home',
       component: HomeShellComponent
+    },
+    {
+      path: 'tuner',
+      component: TunerComponent
     },
     {
       path: 'settings',

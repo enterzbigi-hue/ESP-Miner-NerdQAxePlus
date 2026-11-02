@@ -34,6 +34,7 @@
 #include "macros.h"
 #include "main.h"
 #include "nvs_config.h"
+#include "auto_tuner.h"
 #include "otp/otp.h"
 #include "ping_task.h"
 #include "serial.h"
@@ -220,6 +221,7 @@ extern "C" void app_main(void)
 
     ESP_LOGI(TAG, "Welcome to the Nerd*Axe - hack the planet!");
     ESP_ERROR_CHECK(nvs_flash_init());
+    AutoTuner::init();
 
     // shows and saves last reset reason
     esp_reset_reason_t reason = SYSTEM_MODULE.showLastResetReason();

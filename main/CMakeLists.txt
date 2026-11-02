@@ -1,6 +1,9 @@
 idf_component_register(
 SRCS
     "main.cpp"
+    "auto_tuner.cpp"
+    "hash_capture.cpp"
+    "./http_server/handler_tuner.cpp"
     "nvs_config.cpp"
     "system.cpp"
     "sntp.cpp"

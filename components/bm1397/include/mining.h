@@ -26,6 +26,9 @@ typedef struct
 
     char *jobid;
     char *extranonce2;
+    uint32_t capture_inputs_id; // Optional RAM telemetry reference; zero means unavailable.
+    uint32_t tuner_run;
+    int tuner_step;
 } bm_job;
 
 void free_bm_job(bm_job *job);

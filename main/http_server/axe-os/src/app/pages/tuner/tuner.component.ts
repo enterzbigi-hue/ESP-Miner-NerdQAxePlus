@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { NbButtonModule, NbCardModule, NbInputModule } from '@nebular/theme';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { EMPTY, Subject, catchError, exhaustMap, finalize, switchMap, takeUntil, timer } from 'rxjs';
 import { SystemService } from '../../services/system.service';
 import { ISettingsV2Pool } from '../../models/ISettingsV2';
@@ -25,7 +26,7 @@ interface TunerState {
 @Component({
   selector: 'app-tuner',
   standalone: true,
-  imports: [CommonModule, FormsModule, NbButtonModule, NbCardModule, NbInputModule],
+  imports: [CommonModule, FormsModule, NbButtonModule, NbCardModule, NbInputModule, TranslateModule],
   templateUrl: './tuner.component.html',
   styleUrls: ['./tuner.component.scss'],
 })
@@ -36,14 +37,14 @@ export class TunerComponent implements OnInit, OnDestroy {
   searchBits = 32;
   requiredProtocol = 0;
   widthOptions = [
-    { value: 32, label: '32 bity · 4 bajty · FFFFFFFF (domyślnie)' },
-    { value: 0, label: 'Auto · cała przestrzeń przydzielona przez pulę' },
-    { value: 4, label: '4 bity · 1 znak HEX · maksimum F' },
-    { value: 8, label: '8 bitów · 1 bajt · maksimum FF' },
-    { value: 16, label: '16 bitów · 2 bajty · maksimum FFFF' },
-    { value: 64, label: '64 bity · 8 bajtów · 16 znaków HEX' },
-    { value: 128, label: '128 bitów · 16 bajtów · 32 znaki HEX' },
-    { value: 256, label: '256 bitów · 32 bajty · 64 znaki HEX' },
+    { value: 32, label: 'TUNER.W32' },
+    { value: 0, label: 'TUNER.WAUTO' },
+    { value: 4, label: 'TUNER.W4' },
+    { value: 8, label: 'TUNER.W8' },
+    { value: 16, label: 'TUNER.W16' },
+    { value: 64, label: 'TUNER.W64' },
+    { value: 128, label: 'TUNER.W128' },
+    { value: 256, label: 'TUNER.W256' },
   ];
   poolIndex = 0;
   connectionMode = 1;
@@ -57,7 +58,9 @@ export class TunerComponent implements OnInit, OnDestroy {
   error = '';
   private loaded = false;
   private destroy$ = new Subject<void>();
-  constructor(private http: HttpClient, private otp: OtpAuthService, private system: SystemService) {}
+  constructor(private http: HttpClient, private otp: OtpAuthService, private system: SystemService,
+              private translate: TranslateService) {}
+  private t(key: string, params?: object): string { return this.translate.instant('TUNER.' + key, params); }
   get current(): Step | undefined { return this.state?.steps[this.state.current_step]; }
   get progress(): number {
     if (!this.state) return 0;
@@ -73,7 +76,7 @@ export class TunerComponent implements OnInit, OnDestroy {
   }
   get best(): Step | undefined { return this.state?.steps.find(row => row.is_best); }
   protocolName(value: number): string {
-    return ({1: 'Stratum V1', 2: 'Stratum V2 Extended', 3: 'Stratum V2 Standard'} as Record<number,string>)[value] || 'Oczekiwanie na sesję';
+    return ({1: 'Stratum V1', 2: 'Stratum V2 Extended', 3: 'Stratum V2 Standard'} as Record<number,string>)[value] || this.t('WAITING_SESSION');
   }
   get validConnection(): boolean {
     return this.connectionReady && !!this.connectionHost.trim() && Number.isInteger(this.connectionPort) &&
@@ -99,25 +102,25 @@ export class TunerComponent implements OnInit, OnDestroy {
       sv2ChannelType: this.connectionMode === 3 ? 1 : 0,
       sv2AuthorityPubkey: this.connectionKey.trim(),
     };
-    this.otp.ensureOtp$('', 'Połączenie puli', 'Potwierdź zmianę połączenia z pulą.').pipe(
+    this.otp.ensureOtp$('', this.t('OTP_POOL_TITLE'), this.t('OTP_POOL_TEXT')).pipe(
       switchMap(({totp}) => this.system.updateSettingsV2('', {pools: index === 0 ? [patch] : [{}, patch]}, totp)),
       takeUntil(this.destroy$), finalize(() => this.busy = false),
     ).subscribe({
       next: () => {
         this.pools[index] = {...this.pools[index], ...patch};
-        this.connectionInfo = 'Zapisano. Koparka ponownie łączy się z pulą. Rzeczywisty kanał jest pokazany powyżej.';
+        this.connectionInfo = this.t('CONN_SAVED');
       },
-      error: () => this.connectionInfo = 'Nie udało się zapisać połączenia. Sprawdź sesję OTP i połączenie z koparką.',
+      error: () => this.connectionInfo = this.t('CONN_ERR'),
     });
   }
   ngOnInit(): void {
     this.system.getSettingsV2().pipe(takeUntil(this.destroy$)).subscribe({
       next: settings => { this.pools = settings.pools || []; this.selectPool(0); },
-      error: () => this.connectionInfo = 'Nie można odczytać ustawień połączenia.',
+      error: () => this.connectionInfo = this.t('SETTINGS_ERR'),
     });
     timer(0, 5000).pipe(
       exhaustMap(() => this.http.get<TunerState>('/api/v2/tuner').pipe(
-        catchError(() => { this.error = 'Nie można odczytać stanu urządzenia. Dane mogą być nieaktualne.'; return EMPTY; }),
+        catchError(() => { this.error = this.t('STATE_ERR'); return EMPTY; }),
       )),
       takeUntil(this.destroy$),
     ).subscribe(state => {
@@ -136,7 +139,7 @@ export class TunerComponent implements OnInit, OnDestroy {
     if (this.busy || (action === 'reset' && !this.validStart) || (action === 'pause' && !this.validManual)) return;
     this.busy = true;
     this.error = '';
-    this.otp.ensureOtp$('', 'Auto tuner', 'Potwierdź zmianę pracy tunera kodem OTP.').pipe(
+    this.otp.ensureOtp$('', this.t('TITLE'), this.t('OTP_TUNER_TEXT')).pipe(
       switchMap(({ totp }) => {
         const headers = totp ? new HttpHeaders({ 'X-TOTP': totp }) : undefined;
         const payload = action === 'reset'
@@ -147,7 +150,7 @@ export class TunerComponent implements OnInit, OnDestroy {
       finalize(() => this.busy = false),
     ).subscribe({
       next: state => this.state = state,
-      error: () => this.error = 'Nie udało się zmienić ustawień. Sprawdź połączenie i sesję OTP.',
+      error: () => this.error = this.t('CMD_ERR'),
     });
   }
   formatDuration(value: number): string {
@@ -156,7 +159,8 @@ export class TunerComponent implements OnInit, OnDestroy {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const remaining = seconds % 60;
-    return `${hours ? hours + ' godz. ' : ''}${minutes} min ${String(remaining).padStart(2, '0')} s`;
+    const s = String(remaining).padStart(2, '0');
+    return hours ? this.t('DURATION_H', { h: hours, m: minutes, s }) : this.t('DURATION', { m: minutes, s });
   }
   exportCsv(): void {
     if (!this.state) return;

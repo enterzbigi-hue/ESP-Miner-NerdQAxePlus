@@ -26,6 +26,7 @@
 #include "handler_shutdown.h"
 #include "handler_file.h"
 #include "handler_alert.h"
+#include "handler_tuner.h"
 #include "handler_otp.h"
 #include "macros.h"
 
@@ -150,7 +151,7 @@ esp_err_t start_rest_server(void * pvParameters)
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 50;
+    config.max_uri_handlers = 57;
     config.lru_purge_enable = true;
     config.max_open_sockets = 10;
     config.stack_size = 12288;
@@ -319,6 +320,25 @@ esp_err_t start_rest_server(void * pvParameters)
     httpd_uri_t get_otp_status = {
         .uri = "/api/v2/otp/status", .method = HTTP_GET, .handler = GET_otp_status, .user_ctx = rest_context};
     httpd_register_uri_handler(http_server, &get_otp_status);
+
+    httpd_uri_t tuner_get = {
+        .uri = "/api/v2/tuner", .method = HTTP_GET, .handler = GET_tuner, .user_ctx = rest_context};
+    ESP_ERROR_CHECK(httpd_register_uri_handler(http_server, &tuner_get));
+    httpd_uri_t tuner_post = {
+        .uri = "/api/v2/tuner", .method = HTTP_POST, .handler = POST_tuner, .user_ctx = rest_context};
+    ESP_ERROR_CHECK(httpd_register_uri_handler(http_server, &tuner_post));
+    httpd_uri_t tuner_options = {
+        .uri = "/api/v2/tuner", .method = HTTP_OPTIONS, .handler = handle_options_request, .user_ctx = rest_context};
+    ESP_ERROR_CHECK(httpd_register_uri_handler(http_server, &tuner_options));
+    httpd_uri_t capture_get = {
+        .uri = "/api/v2/hash-capture", .method = HTTP_GET, .handler = GET_hash_capture, .user_ctx = rest_context};
+    ESP_ERROR_CHECK(httpd_register_uri_handler(http_server, &capture_get));
+    httpd_uri_t capture_post = {
+        .uri = "/api/v2/hash-capture", .method = HTTP_POST, .handler = POST_hash_capture, .user_ctx = rest_context};
+    ESP_ERROR_CHECK(httpd_register_uri_handler(http_server, &capture_post));
+    httpd_uri_t capture_options = {
+        .uri = "/api/v2/hash-capture", .method = HTTP_OPTIONS, .handler = handle_options_request, .user_ctx = rest_context};
+    ESP_ERROR_CHECK(httpd_register_uri_handler(http_server, &capture_options));
 
     httpd_uri_t alert_info_get_uri = {
         .uri = "/api/v2/alert", .method = HTTP_GET, .handler = GET_alert_info, .user_ctx = rest_context};

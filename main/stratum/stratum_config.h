@@ -23,6 +23,9 @@ class StratumConfig {
     bool m_enonceSub = false;
     bool m_tls = false;
     StratumProtocol m_protocol = STRATUM_V1;
+    uint16_t m_sv2ChannelType = 0;
+    bool m_sv2RequireAuth = false;
+    char *m_sv2AuthorityKey = nullptr;
 
   public:
     StratumConfig(int pool);
@@ -32,6 +35,7 @@ class StratumConfig {
         safe_free(m_host);
         safe_free(m_user);
         safe_free(m_password);
+        safe_free(m_sv2AuthorityKey);
     }
 
     void copyInto(StratumConfig *dst);

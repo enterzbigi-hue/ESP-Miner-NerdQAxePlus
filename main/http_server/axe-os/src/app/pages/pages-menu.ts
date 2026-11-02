@@ -18,6 +18,11 @@ export const MENU_ITEMS: NbMenuItem[] = [
     link: '/pages/can-fleet',
   },
   {
+    title: 'Auto tuner',
+    icon: 'activity-outline',
+    link: '/pages/tuner',
+  },
+  {
     title: 'Settings',
     icon: 'settings-2-outline',
     link: '/pages/settings',

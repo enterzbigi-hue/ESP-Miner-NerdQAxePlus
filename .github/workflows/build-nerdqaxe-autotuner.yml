@@ -1,0 +1,117 @@
+name: NerdQAxe++ Auto Tuner - BIN
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Pobierz projekt
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Przygotuj Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
+
+      - name: Testy logiki i zabezpieczen
+        env:
+          CXX: clang++
+        run: |
+          set -euo pipefail
+          python3 test/run_auto_tuner_native.py
+          python3 test/static_can_patch_body_test.py
+          python3 test/static_cors_otp_test.py
+
+      - name: Przygotuj secp256k1, gdy nie dolaczono zrodel
+        run: |
+          set -euo pipefail
+          vendor=components/libsecp256k1/libsecp256k1
+          if [ ! -f "$vendor/src/secp256k1.c" ]; then
+            mkdir -p "$vendor"
+            git -C "$vendor" init
+            git -C "$vendor" fetch --depth 1 https://github.com/bitcoin-core/secp256k1.git 0cdc758a56360bf58a851fe91085a327ec97685a
+            git -C "$vendor" checkout --detach FETCH_HEAD
+          fi
+
+      - name: Zbuduj panel WWW
+        working-directory: main/http_server/axe-os
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Zbuduj firmware ESP32-S3, NerdQAxe++
+        run: |
+          set -euo pipefail
+          docker run --rm --user root \
+            -e BOARD=NERDQAXEPLUS2 -e IDF_TARGET=esp32s3 \
+            -e BUILD_VERSION="autotuner-ci-${GITHUB_RUN_NUMBER}" \
+            -v "$PWD:/project" -w /project \
+            espressif/idf:v5.3.6 bash -lc '
+              set -euo pipefail
+              . /opt/esp/idf/export.sh
+              idf.py -B build-autotuner \
+                -D SDKCONFIG=/project/sdkconfig.autotuner \
+                -D BUILD_WEB=OFF -D PROJECT_VER="$BUILD_VERSION" build
+              if grep -q "^CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y" sdkconfig.autotuner; then
+                echo "Unexpected diagnostic configuration" >&2
+                exit 1
+              fi
+            '
+
+      - name: Przygotuj paczke i sprawdz limit 20 MB
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import hashlib, json, os, shutil, zipfile
+          out = Path('release')
+          out.mkdir()
+          files = {}
+          for source, name, limit in [
+              ('esp-miner.bin', 'esp-miner-NerdQAxe++.bin', 4 * 1024**2),
+              ('www.bin', 'www.bin', 3 * 1024**2),
+          ]:
+              data = (Path('build-autotuner') / source).read_bytes()
+              if not 0 < len(data) <= limit:
+                  raise SystemExit(f'Nieprawidlowy rozmiar: {source}')
+              (out / name).write_bytes(data)
+              files[name] = {'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
+          for doc in ['WGRYWANIE.txt', 'GITHUB_AUTO_TUNER_PL.md']:
+              shutil.copyfile(Path('docs') / doc, out / doc)
+          metadata = {'board': 'NERDQAXEPLUS2', 'idf_version': '5.3.6',
+                      'version': 'autotuner-ci-' + os.environ['GITHUB_RUN_NUMBER'],
+                      'commit': os.environ['GITHUB_SHA'], 'physical_device_tested': False,
+                      'files': files}
+          (out / 'kompilacja.json').write_text(json.dumps(metadata, indent=2) + '\n')
+          (out / 'SHA256SUMS.txt').write_text(''.join(
+              f'{info["sha256"]}  {name}\n' for name, info in files.items()))
+          with zipfile.ZipFile('nerdqaxe-auto-tuner-bin.zip', 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path in sorted(out.iterdir()):
+                  archive.write(path, path.name)
+          size = Path('nerdqaxe-auto-tuner-bin.zip').stat().st_size
+          if size >= 20_000_000:
+              raise SystemExit(f'Paczka przekracza limit 20 MB: {size}')
+          print(f'Paczka BIN: {size:,} bajtow; limit 20 000 000.')
+          PYTHON
+
+      - name: Udostepnij gotowe pliki do pobrania
+        uses: actions/upload-artifact@v7
+        with:
+          name: nerdqaxe-auto-tuner-bin
+          path: release/
+          compression-level: 9
+          if-no-files-found: error
+          retention-days: 14

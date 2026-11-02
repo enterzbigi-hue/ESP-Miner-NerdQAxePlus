@@ -37,6 +37,9 @@ StratumConfig::StratumConfig(int pool)
         m_tls = Config::isStratumFallbackTLS();
         m_protocol = (StratumProtocol) Config::getFallbackStratumProtocol();
     }
+    m_sv2ChannelType = m_primary ? Config::getSV2ChannelType() : Config::getFallbackSV2ChannelType();
+    m_sv2RequireAuth = m_primary ? Config::isSV2RequireAuth() : Config::isFallbackSV2RequireAuth();
+    m_sv2AuthorityKey = m_primary ? Config::getSV2AuthorityPubkey() : Config::getFallbackSV2AuthorityPubkey();
 }
 
 bool StratumConfig::reload()
@@ -49,6 +52,10 @@ bool StratumConfig::reload()
     bool newEnsub = m_primary ? Config::isStratumEnonceSubscribe() : Config::isStratumFallbackEnonceSubscribe();
     bool newTLS   = m_primary ? Config::isStratumTLS() : Config::isStratumFallbackTLS();
     StratumProtocol newProto = (StratumProtocol)(m_primary ? Config::getStratumProtocol() : Config::getFallbackStratumProtocol());
+    const uint16_t newChannel = m_primary ? Config::getSV2ChannelType() : Config::getFallbackSV2ChannelType();
+    const bool newAuth = m_primary ? Config::isSV2RequireAuth() : Config::isFallbackSV2RequireAuth();
+    char *newKey = m_primary ? Config::getSV2AuthorityPubkey() : Config::getFallbackSV2AuthorityPubkey();
+    // A channel/key/auth change must reconnect even when host and V2 protocol stay the same.
     // Compare
     bool same =
         strEq(m_host, newHost) &&
@@ -57,13 +64,15 @@ bool StratumConfig::reload()
         strEq(m_password, newPass) &&
         m_enonceSub == newEnsub &&
         m_tls == newTLS &&
-        m_protocol == newProto;
+        m_protocol == newProto && m_sv2ChannelType == newChannel &&
+        m_sv2RequireAuth == newAuth && strEq(m_sv2AuthorityKey, newKey);
 
     if (same) {
         // Free temporary values (they were newly allocated by Config::get)
         safe_free(newHost);
         safe_free(newUser);
         safe_free(newPass);
+        safe_free(newKey);
         return false;
     }
 
@@ -79,6 +88,10 @@ bool StratumConfig::reload()
     m_enonceSub  = newEnsub;
     m_tls        = newTLS;
     m_protocol   = newProto;
+    m_sv2ChannelType = newChannel;
+    m_sv2RequireAuth = newAuth;
+    safe_free(m_sv2AuthorityKey);
+    m_sv2AuthorityKey = newKey;
 
     return true;
 }
@@ -88,6 +101,7 @@ void StratumConfig::copyInto(StratumConfig *dst)
     safe_free(dst->m_host);
     safe_free(dst->m_user);
     safe_free(dst->m_password);
+    safe_free(dst->m_sv2AuthorityKey);
 
     dst->m_primary   = m_primary;
     dst->m_host      = m_host ? strdup(m_host) : nullptr;
@@ -97,6 +111,9 @@ void StratumConfig::copyInto(StratumConfig *dst)
     dst->m_enonceSub = m_enonceSub;
     dst->m_tls       = m_tls;
     dst->m_protocol  = m_protocol;
+    dst->m_sv2ChannelType = m_sv2ChannelType;
+    dst->m_sv2RequireAuth = m_sv2RequireAuth;
+    dst->m_sv2AuthorityKey = m_sv2AuthorityKey ? strdup(m_sv2AuthorityKey) : nullptr;
 }
 
 

@@ -80,6 +80,11 @@ import { IIdentifyV2 } from '../models/IIdentifyV2';
                 link: '/pages/swarm',
             },
             {
+                title: 'Auto tuner',
+                icon: 'activity-outline',
+                link: '/pages/tuner',
+            },
+            {
                 title: this.translateService.instant('NAVIGATION.SETTINGS'),
                 icon: 'settings-2-outline',
                 link: '/pages/settings',

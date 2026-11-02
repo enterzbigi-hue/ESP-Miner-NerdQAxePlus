@@ -1,0 +1,34 @@
+NERDQAXE++ — AUTO TUNER — GOTOWE PLIKI BIN
+Wersja: autotuner-20261016-manual (lokalnie) / autotuner-ci-N (GitHub) | ESP-IDF 5.3.6 | BOARD=NERDQAXEPLUS2
+
+1. Zapisz obecne ustawienia koparki oraz wersję dotychczasowego firmware'u.
+2. Otwórz panel koparki w tej samej sieci lokalnej.
+3. Wejdź w Settings/Ustawienia i odszukaj ręczną aktualizację.
+   W tym projekcie jest to sekcja „Starsze aktualizacje”, widoczna po
+   włączeniu trybu zaawansowanego przyciskiem z trójkątem „Danger Zone”.
+4. W „Ręczna aktualizacja oprogramowania” wybierz:
+   esp-miner-NerdQAxe++.bin
+   Kliknij „Wgraj” i poczekaj na zakończenie oraz ponowne uruchomienie.
+5. Otwórz ustawienia ponownie. W „Ręczna aktualizacja WWW” wybierz:
+   www.bin
+   Kliknij „Wgraj” i poczekaj na zakończenie.
+6. Odśwież stronę przez Cmd+Shift+R i otwórz zakładkę „Auto tuner”.
+7. Ustaw szerokość licznika (domyślnie 32 bity = 4 bajty = FFFFFFFF),
+   wpisz początek skanu w procentach i kliknij „Rozpocznij nowy pomiar”.
+   Szerokość licznika nie może przekroczyć przydziału puli.
+8. W rozwijanej sekcji połączenia puli można wybrać Stratum V1,
+   V2 Standard lub V2 Extended. Zapisanie ustawienia ponownie łączy pulę.
+   V2 Standard pozwala kopać, lecz nie udostępnia extranonce2 tunerowi.
+   Do regulacji extranonce2 użyj V1 albo V2 Extended zgodnego z pulą.
+
+Po wyłączeniu tunera punkt startowy wybierasz w polu procentowym.
+Domyślnie wynosi 73,24% wybranego licznika; licznik maleje.
+Skan schodzi co 5 punktów procentowych po 10 obserwowanych zmianach
+wysokości bloków Bitcoin. Po skanie wybiera zakres z najwyższym diffem.
+
+To pliki do ręcznej aktualizacji OTA, nie obraz factory do zapisu od 0x0.
+Podczas zapisu nie odłączaj zasilania. Aktualizacja automatyczna z GitHuba
+pobrałaby publiczny firmware bez tych zmian.
+
+Kompilacja i kontrola obrazu przeszły. Wstępne testy na fizycznej
+NerdQAxe++ wykonano; pełny 33-godzinny test jest w toku. Sumy SHA256 są w SHA256SUMS.txt.

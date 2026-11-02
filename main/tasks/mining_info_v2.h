@@ -18,7 +18,8 @@ class MiningInfoV2Standard : public MiningInfoBase {
     MiningInfoV2Standard();
     ~MiningInfoV2Standard() override;
 
-    bm_job *buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff) override;
+    bm_job *buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff, const char *extranonce_hex = nullptr) override;
+    int getTunerProtocol() const override { return 3; }
     bool isValid() const override;
     bool isNewWork(uint32_t &last_ntime) const override;
     const char *getJobId() const override;
@@ -61,7 +62,9 @@ class MiningInfoV2Extended : public MiningInfoBase {
     MiningInfoV2Extended();
     ~MiningInfoV2Extended() override;
 
-    bm_job *buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff) override;
+    bm_job *buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff, const char *extranonce_hex = nullptr) override;
+    int getExtranonceBytes() const override { return m_extranonce_size; }
+    int getTunerProtocol() const override { return 2; }
     bool isValid() const override;
     bool isNewWork(uint32_t &last_ntime) const override;
     const char *getJobId() const override;

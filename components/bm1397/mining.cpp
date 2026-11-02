@@ -1,4 +1,5 @@
 #include "mining.h"
+#include "block_header.h"
 #include "mbedtls/sha256.h"
 #include "mining_utils.h"
 #include "macros.h"
@@ -38,6 +39,9 @@ void calculate_merkle_root_hash(const char *coinbase_tx, const uint8_t merkle_br
 // take a mining_notify struct with ascii hex strings and convert it to a bm_job struct
 void construct_bm_job(mining_notify *params, const char *merkle_root, const uint32_t version_mask, bm_job *new_job)
 {
+    new_job->capture_inputs_id = 0;
+    new_job->tuner_run = 0;
+    new_job->tuner_step = -1;
     new_job->version = params->version;
     new_job->version_mask = version_mask;
     new_job->starting_nonce = 0;
@@ -70,12 +74,8 @@ double test_nonce_value(const bm_job *job, const uint32_t nonce, const uint32_t 
     unsigned char header[80];
 
     // copy data from job to header
-    memcpy(header, &rolled_version, 4);
-    memcpy(header + 4, job->prev_block_hash, 32);
-    memcpy(header + 36, job->merkle_root, 32);
-    memcpy(header + 68, &job->ntime, 4);
-    memcpy(header + 72, &job->target, 4);
-    memcpy(header + 76, &nonce, 4);
+    serialize_block_header(header, rolled_version, job->prev_block_hash,
+        job->merkle_root, job->ntime, job->target, nonce);
 
     unsigned char hash_buffer[32];
     unsigned char hash_result[32];

@@ -1,0 +1,32 @@
+:host { display: block; }
+.intro, .footnote { opacity: .8; }
+.status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+.status-grid div { border: 1px solid #8994a540; border-radius: .6rem; padding: 1rem; }
+small, strong { display: block; }
+.status-grid strong { margin-top: .5rem; font-size: 1.05rem; }
+progress { width: 100%; height: 1rem; accent-color: #36a4ff; margin: .5rem 0; }
+.nonce, .hex, code { overflow-wrap: anywhere; }
+.controls { display: flex; gap: .75rem; flex-wrap: wrap; margin: 1rem 0; }
+.new-scan { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; border-top: 1px solid #8994a540; padding-top: 1.25rem; }
+.new-scan input { width: 8rem; }
+.new-scan small { flex-basis: 100%; }
+.footnote { margin: 1.25rem 0 0; font-size: .8rem; }
+.error { color: #ff637c; }
+.notice { padding: .8rem; border-left: 3px solid #ffaa00; background: #ffaa0012; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .9rem; border-bottom: 1px solid #8994a540; vertical-align: top; }
+th { white-space: nowrap; }
+.hex { font-family: monospace; font-size: .7rem; max-width: 22rem; margin-top: .5rem; opacity: .7; }
+.current { background: #36a4ff12; }
+.best td:first-child { border-left: 3px solid #00d68f; }
+summary { cursor: pointer; margin-top: .5rem; }
+li { margin-top: .5rem; } li code { display: block; font-size: .7rem; }
+@media (max-width: 900px) { .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .status-grid { grid-template-columns: 1fr; } }
+
+select { padding: .7rem; border: 1px solid #8994a570; border-radius: .3rem; color: var(--text-basic-color, #fff); background: var(--card-background-color, #222b45); max-width: 100%; }
+.connection-editor { margin-top: 1.5rem; border-top: 1px solid #8994a540; padding-top: 1rem; }
+.connection-fields { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr); gap: .8rem; align-items: center; margin: 1rem 0; }
+.connection-fields input { width: 100%; max-width: 100%; }
+@media (max-width: 600px) { .connection-fields { grid-template-columns: 1fr; } }

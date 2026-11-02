@@ -2,7 +2,9 @@
 #include <pthread.h>
 #include <string.h>
 #include <sys/time.h>
-
+#include "auto_tuner.h"
+#include "hash_capture.h"
+#include "extranonce_range.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -71,11 +73,21 @@ class MiningInfoV1 : public MiningInfoBase {
 
     // --- MiningInfoBase interface ---
 
-    bm_job* buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff) override
+    bm_job* buildBmJob(uint32_t extranonce_2, int pool_id, uint32_t asic_diff, const char *extranonce_hex = nullptr) override
     {
         // generate extranonce2 hex string
-        char extranonce_2_str[extranonce_2_len * 2 + 1]; // +1 zero termination
-        snprintf(extranonce_2_str, sizeof(extranonce_2_str), "%0*lx", (int) extranonce_2_len * 2, (unsigned long) extranonce_2);
+        if (extranonce_2_len < 1 || extranonce_2_len > 32) return nullptr;
+        char extranonce_2_str[65];
+        size_t extranonce_text_size = extranonce_2_len * 2 + 1;
+        if (extranonce_hex) {
+            if (!ExtranonceRange::validHex(extranonce_hex, extranonce_2_len)) return nullptr;
+            memcpy(extranonce_2_str, extranonce_hex, extranonce_text_size);
+        } else {
+            const uint32_t mask = extranonce_2_len >= 4 ? UINT32_MAX :
+                (extranonce_2_len > 0 ? (uint32_t(1) << (8 * extranonce_2_len)) - 1 : 0);
+            snprintf(extranonce_2_str, extranonce_text_size, "%0*lx", extranonce_2_len * 2,
+                     (unsigned long)(extranonce_2 & mask));
+        }
 
         // generate coinbase tx
         int coinbase_tx_len = strlen(current_job->coinbase_1) + strlen(extranonce_str) + strlen(extranonce_2_str) +
@@ -88,6 +100,19 @@ class MiningInfoV1 : public MiningInfoBase {
         char merkle_root[65];
         calculate_merkle_root_hash(coinbase_tx, current_job->_merkle_branches, current_job->n_merkle_branches,
                                    merkle_root);
+        uint32_t captureId = 0;
+        // Decode only for optional telemetry; the normal job builder is unchanged.
+        auto captureBytes = HashCapture::isEnabled() ? static_cast<uint8_t *>(MALLOC(coinbase_tx_len / 2)) : nullptr;
+        if (captureBytes) {
+            for (int i = 0; i < coinbase_tx_len / 2; ++i) {
+                auto nibble = [](char c) { return c <= '9' ? c - '0' : (c | 32) - 'a' + 10; };
+                captureBytes[i] = (nibble(coinbase_tx[i*2]) << 4) | nibble(coinbase_tx[i*2+1]);
+            }
+            captureId = HashCapture::inputs(captureBytes, coinbase_tx_len / 2,
+                current_job->_merkle_branches, current_job->n_merkle_branches,
+                (strlen(current_job->coinbase_1) + strlen(extranonce_str)) / 2, extranonce_2_len);
+            free(captureBytes);
+        }
         free(coinbase_tx);
 
         // we need malloc because we will save it in the job array
@@ -98,9 +123,15 @@ class MiningInfoV1 : public MiningInfoBase {
         next_job->pool_diff = active_stratum_difficulty;
         next_job->pool_id = pool_id;
         next_job->asic_diff = asic_diff;
+        next_job->capture_inputs_id = captureId;
+        next_job->tuner_run = 0;
+        next_job->tuner_step = -1;
 
         return next_job;
     }
+
+    int getExtranonceBytes() const override { return extranonce_2_len; }
+    int getTunerProtocol() const override { return 1; }
 
     bool isValid() const override
     {
@@ -310,8 +341,7 @@ void create_jobs_task(void *pvParameters)
 
     uint32_t last_ntime[2]{0};
     uint64_t last_submit_time = 0;
-    uint32_t extranonce_2 = 0;
-
+    uint32_t extranonce_2 = 0xBB851EB7;
     // CAN: per-slave rolling counters (upper 7 bits = slave_id, lower 25 = counter)
     uint32_t slave_counters[CAN_SLAVE_MAX] = {0};
 
@@ -360,8 +390,18 @@ void create_jobs_task(void *pvParameters)
             }
 
             uint32_t asic_diff = STRATUM_MANAGER->selectAsicDiff(active_pool, mi->getActiveDifficulty());
-            next_job = mi->buildBmJob(extranonce_2, active_pool, asic_diff);
+            char tuner_hex[65];
+            uint32_t tuner_run = 0;
+            int tuner_step = -1;
+            auto mode = AutoTuner::next(active_pool, mi->getExtranonceBytes(), tuner_hex, tuner_run, tuner_step, mi->getTunerProtocol());
+            // No upward wrap or repeated work at the bottom of a range. Wait for a range change.
+            if (mode == AutoTuner::JobMode::Exhausted) continue;
+            next_job = mi->buildBmJob(extranonce_2, active_pool, asic_diff,
+                mode == AutoTuner::JobMode::Ready ? tuner_hex : nullptr);
+            if (next_job) { next_job->tuner_run = tuner_run; next_job->tuner_step = tuner_step; }
         } // mutex
+
+        if (!next_job) continue;
 
         // set asic difficulty
         asics->setJobDifficultyMask(next_job->asic_diff);
@@ -373,14 +413,10 @@ void create_jobs_task(void *pvParameters)
         last_submit_time = current_time;
 
         int asic_job_id = asics->sendWork(extranonce_2, next_job);
-
+        HashCapture::record(next_job, asic_job_id);
         ESP_LOGD(TAG, "(%s) Sent Job (%d): %02X", active_pool_str, active_pool, asic_job_id);
-
-        // save job
         asicJobs.storeJob(next_job, asic_job_id);
-
-        extranonce_2++;
-
+        if (extranonce_2 > 0) --extranonce_2;
         // --- CAN: send raw job to each slave ---
         for (uint8_t slave = 0; slave < CAN_SLAVE_MAX; slave++) {
             if (!can_master_is_slave_active(slave)) continue;

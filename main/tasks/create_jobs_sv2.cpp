@@ -4,6 +4,7 @@
 #include "global_state.h"
 #include "macros.h"
 #include "esp_log.h"
+#include "auto_tuner.h" // <--- TUTAJ
 
 static const char *TAG = "create_jobs_sv2";
 
@@ -38,7 +39,6 @@ void create_job_sv2_standard(int pool, uint32_t job_id, uint32_t version,
 
     ESP_LOGI(TAG, "(%s) SV2 standard job %lu ready, diff=%lu",
              pool ? "Sec" : "Pri", (unsigned long)job_id, (unsigned long)difficulty);
-
     trigger_job_creation();
 }
 
@@ -68,7 +68,6 @@ void create_job_sv2_extended(int pool, const sv2_ext_job_t *job,
 
     ESP_LOGI(TAG, "(%s) SV2 extended job %lu ready, diff=%lu",
              pool ? "Sec" : "Pri", (unsigned long)job->job_id, (unsigned long)difficulty);
-
     trigger_job_creation();
 }
 

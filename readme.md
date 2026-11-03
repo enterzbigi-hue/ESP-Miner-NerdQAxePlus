@@ -1,3 +1,38 @@
+# NerdQAxe++ Auto Tuner: ESP-Miner fork with extranonce2 control and statistics
+
+This fork of [shufps/ESP-Miner-NerdQAxePlus](https://github.com/shufps/ESP-Miner-NerdQAxePlus) adds an **Auto tuner** tab to AxeOS. You choose the **extranonce2** your miner sends, scan ranges of it, and the miner **collects statistics**: the best difficulties per range with their exact extranonce2, CSV export, and results that survive a reboot. It's based on the official **v1.1.1** (Ethernet support and the new CA bundle included), and the tab follows the panel language (9 languages).
+
+![Auto tuner settings](docs/images/auto_tuner_settings.png)
+
+### What it adds
+
+- **Your own extranonce2:** set the counter width (4–256 bits or the pool's whole allocation) and the start point in percent. The counter counts down per job and never repeats work.
+- **Range scan:** 5% steps, 10 observed Bitcoin blocks per range, then it keeps working in the range with the highest diff.
+- **Statistics:** blocks, jobs, ASIC samples, time and the **top 5 diffs with their extranonce2** for every range. Export to CSV. Saved to NVS, so they survive a reboot.
+- **Stratum V2 Standard / Extended** selectable per pool (upstream shows only Extended).
+- **Hash capture API:** the last 32 jobs and hits with full inputs (coinbase, merkle branches, header) for your own analysis.
+- **Tested:** native unit tests with sanitizers and an ESP-IDF 5.3.6 build in GitHub Actions. Running on a real NerdQAxe++ (4× BM1370, ~6.1 TH/s) with shares accepted and none rejected.
+
+![Range results](docs/images/auto_tuner_results.png)
+
+*The results above are a real 14-range scan from this NerdQAxe++.*
+
+### Install (OTA, no cable)
+
+1. Download `esp-miner-NerdQAxe++.bin` and `www.bin` from **[Releases](https://github.com/enterzbigi-hue/ESP-Miner-NerdQAxePlus/releases)**. They're for **NerdQAxe++** (`NERDQAXEPLUS2`).
+2. AxeOS → **Settings** → advanced mode (Danger Zone) → manual update: upload **`esp-miner-NerdQAxe++.bin` first**, wait for the reboot, **then `www.bin`**.
+3. Reload the page (Ctrl+F5) and open **Auto tuner** in the side menu.
+
+Pool, Wi-Fi and other settings are kept. To go back, flash the official release the same way.
+
+### Honest note
+
+Bitcoin proof-of-work behaves like a random oracle: no extranonce2 range is luckier than another. The best diff of a range is a record of the past, not a prediction, and the tuner doesn't raise your chance of finding a block. It's a tool for curious miners who want to control and measure their device. Full details: **[docs/AUTO_TUNER.md](docs/AUTO_TUNER.md)**.
+
+Donations (BTC): `bc1q73ehm20v8y0zlfc5qh9mqzzftmczp3yg0f6med`
+
+---
+
 [![](https://dcbadge.vercel.app/api/server/3E8ca2dkcC)](https://discord.gg/3E8ca2dkcC)
 
 # ESP-Miner-Nerdaxe version
